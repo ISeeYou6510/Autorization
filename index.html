@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Autoryzacja gracza</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f6f8;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    .container {
+      background: #fff;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+      max-width: 400px;
+      width: 100%;
+    }
+    h1 {
+      font-size: 20px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    label {
+      display: block;
+      margin-bottom: 15px;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      margin-top: 5px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      box-sizing: border-box;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      background: #4cafef;
+      border: none;
+      border-radius: 6px;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #3a9bdc;
+    }
+    #status {
+      margin-top: 15px;
+      text-align: center;
+      font-size: 14px;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Rejestracja do serwera Minecraft</h1>
+    <form id="acceptForm">
+      <label>
+        Imię i nazwisko:
+        <input type="text" id="fullName" name="fullName" required>
+      </label>
+
+      <label>
+        Nick Minecraft:
+        <input type="text" id="nick" name="nick" required>
+      </label>
+
+      <label>
+        Email:
+        <input type="email" id="email" name="email" required>
+      </label>
+
+      <button type="submit">Akceptuję regulamin</button>
+    </form>
+
+    <p id="status"></p>
+  </div>
+
+  <script>
+    document.getElementById("acceptForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const fullName = document.getElementById("fullName").value;
+      const nick = document.getElementById("nick").value;
+      const email = document.getElementById("email").value;
+
+      try {
+        const res = await fetch("https://twoj-projekt.vercel.app/api/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fullName, nick, email })
+        });
+
+        const data = await res.json();
+        document.getElementById("status").innerText = data.message || "Gotowe";
+      } catch (err) {
+        document.getElementById("status").innerText = "Błąd połączenia";
+      }
+    });
+  </script>
+</body>
+</html>

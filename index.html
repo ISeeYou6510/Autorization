@@ -9,8 +9,8 @@
       background: #f4f6f8;
       display: flex;
       justify-content: center;
-      align-items: center;
-      height: 100vh;
+      align-items: flex-start;
+      padding: 30px;
       margin: 0;
     }
     .container {
@@ -18,25 +18,36 @@
       padding: 30px;
       border-radius: 12px;
       box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      max-width: 400px;
+      max-width: 700px;
       width: 100%;
     }
     h1 {
-      font-size: 20px;
+      font-size: 22px;
       margin-bottom: 20px;
       text-align: center;
+    }
+    h2 {
+      font-size: 18px;
+      margin-top: 20px;
+    }
+    p, li {
+      font-size: 14px;
+      line-height: 1.5;
     }
     label {
       display: block;
       margin-bottom: 15px;
     }
-    input {
+    input[type="text"], input[type="email"] {
       width: 100%;
       padding: 10px;
       margin-top: 5px;
       border: 1px solid #ccc;
       border-radius: 6px;
       box-sizing: border-box;
+    }
+    input[type="checkbox"] {
+      margin-right: 8px;
     }
     button {
       width: 100%;
@@ -57,11 +68,62 @@
       font-size: 14px;
       color: #333;
     }
+    .regulamin {
+      max-height: 250px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      padding: 15px;
+      margin-bottom: 20px;
+      background: #fafafa;
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Rejestracja do serwera Minecraft</h1>
+    <h1>Regulamin Serwera Minecraft</h1>
+    <div class="regulamin">
+<pre>
+§1. Zasady ogólne
+1. Grając na serwerze akceptujesz ten regulamin i zobowiązujesz się do jego przestrzegania.
+2. Nieznajomość regulaminu nie zwalnia z jego przestrzegania.
+3. Administracja ma prawo w każdej chwili zmienić regulamin, a gracz ma obowiązek dostosować się do nowych zasad. Oraz regularnie sprawdzać czy takowe nie zostały wprowadzone.
+4. Administracja nie odpowiada za straty spowodowane przez błędy gry, lagi, utratę przedmiotów czy ataki innych graczy.
+§2. Konta i logowanie
+1. Każdy gracz może korzystać tylko ze swojego konta.
+   Tzn. Tego podanego poniżej przy rejestracji.
+2. Zakaz logowania się na cudze konto – nawet za zgodą jego właściciela.
+3. Zakaz tworzenia i używania wielu kont (multikonta). Każdy gracz gra tylko na jednym.
+4. Udostępnianie swojego konta innej osobie jest zabronione.
+5. Próby kradzieży konta, phishingu lub zgadywania haseł będą karane permanentnym banem.
+§3. Czysta i uczciwa rozgrywka
+1. Zabronione jest korzystanie z cheatów, hacków, skryptów i innych nieuczciwych programów.
+2. Niedozwolone są modyfikacje dające przewagę nad innymi (np. X-Ray, KillAura, AutoClicker, FlyHack, SpeedHack).
+3. Dozwolone są wyłącznie modyfikacje, które nie zmieniają mechaniki gry ani nie ujawniają ukrytych informacji. Za dozwolone uznaje się np. optymalizacje graficzne (shadery, OptiFine), poprawki HUD (liczniki FPS, pingi), minimapy bez możliwości podglądu graczy, mobów, struktur, surowców ani innych danych mogących dać przewagę w rozgrywce. W przypadku wątpliwości, decyzję podejmuje administracja. 
+4. Zakaz używania makr, autoclickerów, botów i programów do automatyzacji.
+§4. Zachowanie na serwerze
+1. Zakaz obrażania, wyzywania, prowokowania i spamowania.
+2. Zakaz reklamowania innych serwerów, stron i usług.
+3. Zakaz podszywania się pod administrację lub innych graczy.
+4. Zakaz wulgaryzmów i treści nieodpowiednich (w tym seksualnych, rasistowskich, politycznych).
+5. Poszanowanie innych graczy jest obowiązkowe – nie wolno umyślnie psuć im gry.
+§5. Rozgrywka i świat gry
+1. Zakaz griefingu spawna i innych konstrukcji administracyjnych (np. Targ, czy miejsce spotkań pokojowych)
+2. Zakaz nadużywania błędów gry lub exploitów. 
+3. Zakaz używania programów do zmiany prędkości gry, duplikacji przedmiotów lub innych nieuczciwych trików.
+§6. Kary
+1. Administracja może ukarać gracza w dowolny z poniższych sposobów:
+• Reset postępów w grze.
+• Tymczasowe zawieszenie konta (Ban)
+• Permanentne zawieszenie konta (PermBan)
+• Zakaz wstępu na przyszłe serwery
+• Karą finansową równą trzykrotności składki na serwer (Jeśli takowa była obecna)
+§7. Postanowienia końcowe
+1. Gra na serwerze jest przywilejem, a nie prawem. Administracja może zablokować dostęp do serwera bez podania przyczyny.
+2. Regulamin obowiązuje wszystkich graczy od momentu rejestracji w arkuszu poniżej.
+3. Jeśli coś nie jest wymienione w regulaminie, a administracja uzna to za szkodliwe lub nieuczciwe – i tak może to być karane (Z wykluczeniem kar finansowych).
+</pre>
+    </div>
+
     <form id="acceptForm">
       <label>
         Imię i nazwisko:
@@ -78,7 +140,12 @@
         <input type="email" id="email" name="email" required>
       </label>
 
-      <button type="submit">Akceptuję regulamin</button>
+      <label>
+        <input type="checkbox" id="acceptRules" required>
+        Akceptuję regulamin powyżej
+      </label>
+
+      <button type="submit">Rejestruj się</button>
     </form>
 
     <p id="status"></p>
@@ -91,6 +158,12 @@
       const fullName = document.getElementById("fullName").value;
       const nick = document.getElementById("nick").value;
       const email = document.getElementById("email").value;
+      const acceptRules = document.getElementById("acceptRules").checked;
+
+      if (!acceptRules) {
+        document.getElementById("status").innerText = "Musisz zaakceptować regulamin.";
+        return;
+      }
 
       try {
         const res = await fetch("https://twoj-projekt.vercel.app/api/register", {
@@ -108,3 +181,4 @@
   </script>
 </body>
 </html>
+

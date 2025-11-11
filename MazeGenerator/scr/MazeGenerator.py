@@ -1,37 +1,156 @@
 # maze_gui.py
-# PyQt6 GUI + Pillow export. DFS generator
+# PyQt6 GUI + Pillow export. DFS generator + auto-update z GitHub (raw).
 # Zależności: PyQt6, Pillow
 
 import sys
+import os
+import shutil
+import json
 import random
+import threading
+import subprocess
+import urllib.request
+import urllib.error
 from collections import deque
 from PIL import Image, ImageDraw
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QLineEdit, QHBoxLayout,
-    QVBoxLayout, QFormLayout, QComboBox, QCheckBox, QMessageBox, QSpinBox
+    QVBoxLayout, QFormLayout, QComboBox, QCheckBox, QMessageBox, QSpinBox, QFileDialog
 )
 from PyQt6.QtGui import QPixmap, QImage, QColor, QPainter
-from PyQt6.QtCore import QTimer, Qt, QSize
+from PyQt6.QtCore import QTimer, Qt, QSize, QEvent
 
-# ---------- Maze engine ----------
+# ---------------- CONFIG ----------------
+LOCAL_VERSION = "1.0"
+VERSION_JSON_URL = "https://raw.githubusercontent.com/ISeeYou6510/Autorization/main/MazeGenerator/version.json"
+PY_RAW_TEMPLATE = "https://raw.githubusercontent.com/ISeeYou6510/Autorization/main/MazeGenerator/v{ver}.py"
+BACKUP_SUFFIX = ".backup_before_update"
 
+# ---------------- helper: wersje ----------------
+def parse_version(v):
+    parts = [p for p in str(v).strip().split(".") if p != ""]
+    nums = []
+    for p in parts:
+        try:
+            nums.append(int(p))
+        except:
+            nums.append(0)
+    return tuple(nums)
+
+def compare_versions(a, b):
+    pa = parse_version(a)
+    pb = parse_version(b)
+    L = max(len(pa), len(pb))
+    for i in range(L):
+        ai = pa[i] if i < len(pa) else 0
+        bi = pb[i] if i < len(pb) else 0
+        if ai < bi:
+            return -1
+        if ai > bi:
+            return 1
+    return 0
+
+# ---------------- network download ----------------
+def fetch_url_text(url, timeout=8):
+    req = urllib.request.Request(url, headers={"User-Agent": "MazeUpdater/1.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.read().decode("utf-8")
+
+def fetch_url_bytes(url, timeout=15):
+    req = urllib.request.Request(url, headers={"User-Agent": "MazeUpdater/1.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return resp.read()
+
+# ---------------- auto-update logic ----------------
+def check_for_update_async(parent_widget):
+    def job():
+        try:
+            txt = fetch_url_text(VERSION_JSON_URL, timeout=7)
+            j = json.loads(txt)
+            remote_ver = str(j.get("version", "")).strip()
+            if not remote_ver:
+                return
+        except Exception:
+            return
+
+        if compare_versions(LOCAL_VERSION, remote_ver) >= 0:
+            return
+
+        def ask_user():
+            mb = QMessageBox(parent_widget)
+            mb.setWindowTitle("Aktualizacja dostępna")
+            mb.setText(f"Dostępna nowa wersja: {remote_ver}\nAktualna wersja: {LOCAL_VERSION}\n\nPobrać i zainstalować teraz?")
+            mb.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            res = mb.exec()
+            if res == QMessageBox.StandardButton.Yes:
+                threading.Thread(target=download_and_replace, args=(parent_widget, remote_ver), daemon=True).start()
+        QApplication.instance().postEvent(parent_widget, _CallEvent(ask_user))
+
+    threading.Thread(target=job, daemon=True).start()
+
+def download_and_replace(parent_widget, remote_ver):
+    py_url = PY_RAW_TEMPLATE.format(ver=remote_ver)
+    try:
+        data = fetch_url_bytes(py_url, timeout=15)
+    except Exception as e:
+        QApplication.instance().postEvent(parent_widget, _CallEvent(lambda: QMessageBox.warning(parent_widget, "Aktualizacja", f"Błąd pobierania: {e}")) )
+        return
+
+    if not data or len(data) < 100:
+        QApplication.instance().postEvent(parent_widget, _CallEvent(lambda: QMessageBox.warning(parent_widget, "Aktualizacja", "Pobrano podejrzanie mały plik. Przerwano.") ) )
+        return
+
+    try:
+        current_path = os.path.abspath(sys.argv[0])
+        dirpath = os.path.dirname(current_path)
+        temp_path = os.path.join(dirpath, f".tmp_update_v{remote_ver}.py")
+        backup_path = current_path + BACKUP_SUFFIX
+
+        with open(temp_path, "wb") as f:
+            f.write(data)
+
+        shutil.copy2(current_path, backup_path)
+        os.replace(temp_path, current_path)
+
+        def notify_and_restart():
+            QMessageBox.information(parent_widget, "Aktualizacja", f"Pobrano i zainstalowano wersję {remote_ver}.\nAplikacja uruchomi się ponownie.")
+            python = sys.executable
+            args = [python] + sys.argv
+            try:
+                subprocess.Popen(args)
+            except Exception:
+                pass
+            QApplication.instance().quit()
+        QApplication.instance().postEvent(parent_widget, _CallEvent(notify_and_restart))
+    except Exception as e:
+        QApplication.instance().postEvent(parent_widget, _CallEvent(lambda: QMessageBox.warning(parent_widget, "Aktualizacja", f"Błąd podczas instalacji aktualizacji: {e}")) )
+        try:
+            if os.path.exists(backup_path):
+                shutil.copy2(backup_path, current_path)
+        except:
+            pass
+
+class _CallEvent(QEvent):
+    EVENT_TYPE = QEvent.Type(QEvent.registerEventType())
+    def __init__(self, callable_):
+        super().__init__(self.EVENT_TYPE)
+        self.callable = callable_
+
+# ---------------- Maze generator ----------------
 def make_odd(n):
     n = int(n)
     return n if n % 2 == 1 else n + 1
 
 def dfs_generator(W, H, seed=None):
-    """Zwraca generator kroków rzeźbienia."""
     if seed is not None:
         random.seed(seed)
     maze = [['#' for _ in range(W)] for _ in range(H)]
     visited = [[False]*W for _ in range(H)]
-
     start = (1, 1)
     stack = [start]
     visited[start[1]][start[0]] = True
     maze[start[1]][start[0]] = ' '
     yield ('carve', start[0], start[1], maze)
-
     while stack:
         x, y = stack[-1]
         neighbors = []
@@ -75,27 +194,25 @@ def bfs_solve(maze, start, end):
     path.reverse()
     return path
 
-# ---------- GUI ----------
-
+# ---------------- GUI ----------------
 class MazeWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Maze Generator - PyQt6")
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(900, 600)
 
         self.default_W = 41
         self.default_H = 41
-        self.default_speed_base = 32  # dla 32x32 prędkość bazowa
 
-        # UI: formularz
         form = QFormLayout()
 
         self.w_input = QSpinBox()
-        self.w_input.setRange(5, 201)
+        self.w_input.setRange(5, 301)
         self.w_input.setValue(self.default_W)
         self.w_input.setSingleStep(2)
+
         self.h_input = QSpinBox()
-        self.h_input.setRange(5, 201)
+        self.h_input.setRange(5, 301)
         self.h_input.setValue(self.default_H)
         self.h_input.setSingleStep(2)
 
@@ -114,35 +231,42 @@ class MazeWindow(QWidget):
         self.scale_input.setRange(1, 200)
         self.scale_input.setValue(self.compute_default_scale(self.default_W))
         self.scale_input.setEnabled(False)
+
         self.scale_default_checkbox.stateChanged.connect(self.on_scale_mode_changed)
 
         self.instant_checkbox = QCheckBox("Generuj natychmiast")
 
         self.generate_btn = QPushButton("Generuj")
         self.save_btn = QPushButton("Zapisz PNG")
+        self.save_solution_btn = QPushButton("Zapisz z rozwiązaniem")
         self.save_btn.setEnabled(False)
+        self.save_solution_btn.setEnabled(False)
 
         self.generate_btn.clicked.connect(self.on_generate)
         self.save_btn.clicked.connect(self.on_save)
+        self.save_solution_btn.clicked.connect(self.on_save_solution_dialog)
 
-        form.addRow("Szerokość (W)", self.w_input)
-        form.addRow("Wysokość (H)", self.h_input)
-        form.addRow("Seed", self.seed_input)
-        form.addRow("Wejście/wyjście", self.variant_combo)
+        form.addRow("Szerokość (W):", self.w_input)
+        form.addRow("Wysokość (H):", self.h_input)
+        form.addRow("Seed:", self.seed_input)
+        form.addRow("Wejście/wyjście:", self.variant_combo)
+
         scale_row = QHBoxLayout()
         scale_row.addWidget(self.scale_default_checkbox)
         scale_row.addWidget(self.scale_input)
-        form.addRow("Skala (px na komórkę)", scale_row)
+        form.addRow("Skala (px na komórkę):", scale_row)
         form.addRow(self.instant_checkbox)
 
         btn_row = QHBoxLayout()
         btn_row.addWidget(self.generate_btn)
         btn_row.addWidget(self.save_btn)
+        btn_row.addWidget(self.save_solution_btn)
 
         self.preview_label = QLabel()
         self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview_label.setStyleSheet("background: #eee; border: 1px solid #aaa;")
+        self.preview_label.setStyleSheet("background: #f7f7f7; border: 1px solid #bbb;")
         self.preview_pixmap = None
+        self.preview_dirty = False
 
         left = QVBoxLayout()
         left.addLayout(form)
@@ -152,12 +276,14 @@ class MazeWindow(QWidget):
         main = QHBoxLayout()
         main.addLayout(left, 0)
         main.addWidget(self.preview_label, 1)
+
         self.setLayout(main)
+        self.resize(1200, 700)
 
         self.timer = QTimer()
+        self.timer.setInterval(10)
         self.timer.timeout.connect(self.animation_step)
 
-        # stan
         self.gen_iter = None
         self.current_maze = None
         self.W = None
@@ -165,6 +291,15 @@ class MazeWindow(QWidget):
         self.scale = None
         self.start = None
         self.end = None
+
+    def event(self, ev):
+        if isinstance(ev, _CallEvent):
+            try:
+                ev.callable()
+            except Exception:
+                pass
+            return True
+        return super().event(ev)
 
     def compute_default_scale(self, W):
         scale = (2480 - 300) // max(1, int(W))
@@ -196,20 +331,20 @@ class MazeWindow(QWidget):
         return (1,0), (W-2,H-1)
 
     def prepare_canvas(self, W, H, scale):
+        if W*scale <= 0 or H*scale <= 0:
+            return
         pixmap = QPixmap(W*scale, H*scale)
         pixmap.fill(QColor("white"))
         self.preview_pixmap = pixmap
-        self.preview_label.setPixmap(self.preview_pixmap.scaled(
-            self.preview_label.size(),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
-        ))
+        self.preview_dirty = True
+        self.update_preview_display()
 
     def draw_maze_to_pixmap(self, maze, scale, highlight=None):
         W = len(maze[0])
         H = len(maze)
-        if self.preview_pixmap is None or self.preview_pixmap.size() != QSize(W*scale, H*scale):
-            self.preview_pixmap = QPixmap(W*scale, H*scale)
+        required_size = QSize(W*scale, H*scale)
+        if self.preview_pixmap is None or self.preview_pixmap.size() != required_size:
+            self.preview_pixmap = QPixmap(required_size)
         img = self.preview_pixmap
         painter = QPainter(img)
         painter.fillRect(0,0, img.width(), img.height(), QColor("white"))
@@ -222,11 +357,22 @@ class MazeWindow(QWidget):
             for (x,y) in highlight:
                 painter.fillRect(x*scale, y*scale, scale, scale, QColor("red"))
         painter.end()
-        self.preview_label.setPixmap(self.preview_pixmap.scaled(
-            self.preview_label.size(),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.SmoothTransformation
-        ))
+        self.preview_dirty = True
+        self.update_preview_display()
+
+    def update_preview_display(self):
+        if self.preview_pixmap is None:
+            return
+        target_size = self.preview_label.size()
+        if target_size.width() <= 0 or target_size.height() <= 0:
+            return
+        scaled = self.preview_pixmap.scaled(target_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+        self.preview_label.setPixmap(scaled)
+        self.preview_dirty = False
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.update_preview_display()
 
     def on_generate(self):
         W = make_odd(self.w_input.value())
@@ -241,89 +387,165 @@ class MazeWindow(QWidget):
         self.prepare_canvas(W,H,scale)
         self.current_maze = [['#' for _ in range(W)] for _ in range(H)]
 
+        # zablokuj UI
+        self.generate_btn.setEnabled(False)
+        self.save_btn.setEnabled(False)
+        self.save_solution_btn.setEnabled(False)
+        self.w_input.setEnabled(False)
+        self.h_input.setEnabled(False)
+        self.seed_input.setEnabled(False)
+        self.variant_combo.setEnabled(False)
+        self.scale_default_checkbox.setEnabled(False)
+        self.scale_input.setEnabled(False)
+
         if self.instant_checkbox.isChecked():
-            # generuj natychmiast
-            maze = None
+            final = None
             for step in dfs_generator(W,H,seed):
-                if step[0]=='done':
-                    maze = step[1]
-            self.current_maze = [row[:] for row in maze]
+                if step[0] == 'done':
+                    final = step[1]
+            if final is None:
+                QMessageBox.warning(self, "Błąd", "Generacja nie powiodła się.")
+                self.unlock_ui()
+                return
+            self.current_maze = [row[:] for row in final]
             self.ensure_entrances()
-            self.draw_maze_to_pixmap(self.current_maze, scale)
-            self.save_btn.setEnabled(True)
-        else:
-            # animacja
-            self.gen_iter = dfs_generator(W,H,seed)
-            speed = max(1, 50 * self.default_speed_base // max(W,H))  # przy większych labiryntach szybciej
-            self.timer.setInterval(speed)
-            self.generate_btn.setEnabled(False)
-            self.save_btn.setEnabled(False)
-            self.timer.start()
+            self.draw_maze_to_pixmap(self.current_maze, self.scale)
+            self.unlock_ui()
+            return
+
+        # animacja
+        self.gen_iter = dfs_generator(W,H,seed)  # <--- kluczowa poprawka
+        base_area = 32 * 32
+        area = max(1, W * H)
+        speed_factor = area / base_area
+        base_ms = 12
+        interval_ms = max(1, int(base_ms / speed_factor))
+        self.timer.setInterval(interval_ms)
+        self.timer.start()
 
     def ensure_entrances(self):
         sx,sy = self.start
         ex,ey = self.end
-        # wejście
-        if sy==0: self.current_maze[0][sx]=self.current_maze[1][sx]=' '
-        if sy==self.H-1: self.current_maze[self.H-1][sx]=self.current_maze[self.H-2][sx]=' '
-        if sx==0: self.current_maze[sy][0]=self.current_maze[sy][1]=' '
-        if sx==self.W-1: self.current_maze[sy][self.W-1]=self.current_maze[sy][self.W-2]=' '
-        # wyjście
-        if ey==0: self.current_maze[0][ex]=self.current_maze[1][ex]=' '
-        if ey==self.H-1: self.current_maze[self.H-1][ex]=self.current_maze[self.H-2][ex]=' '
-        if ex==0: self.current_maze[ey][0]=self.current_maze[ey][1]=' '
-        if ex==self.W-1: self.current_maze[ey][self.W-1]=self.current_maze[ey][self.W-2]=' '
+        if sy == 0:
+            self.current_maze[0][sx] = ' '
+            if 1 < self.H:
+                self.current_maze[1][sx] = ' '
+        if sy == self.H-1:
+            self.current_maze[self.H-1][sx] = ' '
+            if self.H-2 >= 0:
+                self.current_maze[self.H-2][sx] = ' '
+        if sx == 0:
+            self.current_maze[sy][0] = ' '
+            if 1 < self.W:
+                self.current_maze[sy][1] = ' '
+        if sx == self.W-1:
+            self.current_maze[sy][self.W-1] = ' '
+            if self.W-2 >= 0:
+                self.current_maze[sy][self.W-2] = ' '
+        if ey == 0:
+            self.current_maze[0][ex] = ' '
+            if 1 < self.H:
+                self.current_maze[1][ex] = ' '
+        if ey == self.H-1:
+            self.current_maze[self.H-1][ex] = ' '
+            if self.H-2 >= 0:
+                self.current_maze[self.H-2][ex] = ' '
+        if ex == 0:
+            self.current_maze[ey][0] = ' '
+            if 1 < self.W:
+                self.current_maze[ey][1] = ' '
+        if ex == self.W-1:
+            self.current_maze[ey][self.W-1] = ' '
+            if self.W-2 >= 0:
+                self.current_maze[ey][self.W-2] = ' '
 
     def animation_step(self):
+        if not self.gen_iter:
+            self.timer.stop()
+            self.unlock_ui()
+            return
         try:
             step = next(self.gen_iter)
+            if step[0] == 'carve':
+                x,y = step[1], step[2]
+                self.current_maze[y][x] = ' '
+                self.draw_maze_to_pixmap(self.current_maze, self.scale)
+            elif step[0] == 'done':
+                self.current_maze = [row[:] for row in step[1]]
+                self.ensure_entrances()
+                self.draw_maze_to_pixmap(self.current_maze, self.scale)
+                self.timer.stop()
+                self.unlock_ui()
         except StopIteration:
-            step = ('done', self.current_maze)
-        if step[0]=='carve':
-            _,x,y,maze_snapshot = step
-            self.current_maze = [row[:] for row in maze_snapshot]
-            self.draw_maze_to_pixmap(self.current_maze, self.scale)
-        elif step[0]=='done':
-            self.current_maze = [row[:] for row in step[1]]
-            self.ensure_entrances()
-            self.draw_maze_to_pixmap(self.current_maze, self.scale)
             self.timer.stop()
-            self.generate_btn.setEnabled(True)
-            self.save_btn.setEnabled(True)
+            self.unlock_ui()
+        except Exception as e:
+            self.timer.stop()
+            QMessageBox.warning(self, "Błąd animacji", str(e))
+            self.unlock_ui()
+
+    def unlock_ui(self):
+        self.generate_btn.setEnabled(True)
+        self.save_btn.setEnabled(True)
+        self.save_solution_btn.setEnabled(True)
+        self.w_input.setEnabled(True)
+        self.h_input.setEnabled(True)
+        self.seed_input.setEnabled(True)
+        self.variant_combo.setEnabled(True)
+        self.scale_default_checkbox.setEnabled(True)
+        self.on_scale_mode_changed(0)
 
     def on_save(self):
-        if not self.current_maze:
-            QMessageBox.warning(self,"Brak labiryntu","Najpierw wygeneruj labirynt.")
+        filename, _ = QFileDialog.getSaveFileName(self, "Zapisz PNG", "", "PNG Files (*.png)")
+        if not filename:
             return
-        maze = self.current_maze
-        W,H,scale = len(maze[0]),len(maze),self.scale
-        maze_fn,sol_fn="maze.png","maze_solution.png"
-        img = Image.new("RGB",(W*scale,H*scale),"white")
+        self.save_maze_png(filename, self.current_maze, self.scale)
+
+    def on_save_solution_dialog(self):
+        filename, _ = QFileDialog.getSaveFileName(self, "Zapisz z rozwiązaniem", "", "PNG Files (*.png)")
+        if not filename:
+            return
+        path = filename
+        path = path.replace("\\", "/")
+        path = path if path.endswith(".png") else path + ".png"
+        path = os.path.abspath(path)
+        path_dir = os.path.dirname(path)
+        if not os.path.exists(path_dir):
+            os.makedirs(path_dir)
+        self.save_maze_solution_png(path)
+
+    def save_maze_png(self, filename, maze, scale):
+        H = len(maze)
+        W = len(maze[0])
+        img = Image.new("RGB", (W*scale, H*scale), "white")
         draw = ImageDraw.Draw(img)
         for y in range(H):
             for x in range(W):
-                if maze[y][x]=='#': draw.rectangle([x*scale,y*scale,(x+1)*scale-1,(y+1)*scale-1],fill=(0,0,0))
-        img.save(maze_fn)
-        # rozwiązanie
-        sx,sy=self.start
-        ex,ey=self.end
-        start_bfs=(sx,1) if sy==0 else (sx,H-2) if sy==H-1 else (1,sy) if sx==0 else (W-2,sy) if sx==W-1 else (sx,sy)
-        end_bfs=(ex,1) if ey==0 else (ex,H-2) if ey==H-1 else (1,ey) if ex==0 else (W-2,ey) if ex==W-1 else (ex,ey)
-        path=bfs_solve(maze,start_bfs,end_bfs)
-        img2=img.copy()
-        draw2=ImageDraw.Draw(img2)
-        for x,y in path:
-            draw2.rectangle([x*scale,y*scale,(x+1)*scale-1,(y+1)*scale-1],fill=(255,0,0))
-        img2.save(sol_fn)
-        QMessageBox.information(self,"Zapisano",f"Zapisano pliki:\n{maze_fn}\n{sol_fn}")
+                if maze[y][x] == '#':
+                    draw.rectangle([x*scale, y*scale, x*scale+scale-1, y*scale+scale-1], fill="black")
+        img.save(filename)
 
-# ---------- Uruchomienie ----------
+    def save_maze_solution_png(self, filename):
+        path = filename
+        maze = [row[:] for row in self.current_maze]
+        path_cells = bfs_solve(maze, self.start, self.end)
+        scale = self.scale
+        H = len(maze)
+        W = len(maze[0])
+        img = Image.new("RGB", (W*scale, H*scale), "white")
+        draw = ImageDraw.Draw(img)
+        for y in range(H):
+            for x in range(W):
+                if maze[y][x] == '#':
+                    draw.rectangle([x*scale, y*scale, x*scale+scale-1, y*scale+scale-1], fill="black")
+        for x,y in path_cells:
+            draw.rectangle([x*scale, y*scale, x*scale+scale-1, y*scale+scale-1], fill="red")
+        img.save(path)
 
-def main():
+# ---------------- main ----------------
+if __name__ == "__main__":
     app = QApplication(sys.argv)
-    w = MazeWindow()
-    w.show()
+    win = MazeWindow()
+    win.show()
+    check_for_update_async(win)
     sys.exit(app.exec())
-
-if __name__=="__main__":
-    main()

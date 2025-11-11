@@ -21,7 +21,7 @@ from PyQt6.QtGui import QPixmap, QImage, QColor, QPainter
 from PyQt6.QtCore import QTimer, Qt, QSize, QEvent
 
 # ---------------- CONFIG ----------------
-LOCAL_VERSION = "1.0"
+LOCAL_VERSION = "2.0"
 VERSION_JSON_URL = "https://raw.githubusercontent.com/ISeeYou6510/Autorization/main/MazeGenerator/version.json"
 PY_RAW_TEMPLATE = "https://raw.githubusercontent.com/ISeeYou6510/Autorization/main/MazeGenerator/v{ver}.py"
 BACKUP_SUFFIX = ".backup_before_update"

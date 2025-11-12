@@ -1,7 +1,7 @@
 {
-  "version": "2.0",
+  "version": "1.0.1",
   "name": "MazeGenerator",
-  "last_update": "2025-11-11",
+  "last_update": "2025-12-11",
   "changelog": [
     "Initial release. Basic maze generation."
   ]

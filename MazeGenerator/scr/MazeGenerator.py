@@ -26,7 +26,7 @@ from PyQt6.QtCore import QTimer, Qt, QSize, QEvent
 from PyQt6.QtGui import QIcon
 
 # ---------------- CONFIG ----------------
-LOCAL_VERSION = "1.0.1"
+LOCAL_VERSION = "1.0.2"
 VERSION_JSON_URL = "https://raw.githubusercontent.com/ISeeYou6510/Autorization/main/MazeGenerator/version.json"
 # Primary candidate(s) for the file to download (raw)
 CANDIDATE_UPDATE_URLS = [

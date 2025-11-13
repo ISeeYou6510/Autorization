@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QPixmap, QImage, QColor, QPainter
 from PyQt6.QtCore import QTimer, Qt, QSize, QEvent
+from PyQt6.QtGui import QIcon
 
 # ---------------- CONFIG ----------------
 LOCAL_VERSION = "1.0.1"
@@ -696,3 +697,4 @@ if __name__ == "__main__":
     # uruchom check_for_update po krótkim delay, bezpieczniej niż natychmiast
     QTimer.singleShot(1000, lambda: check_for_update_async(win))
     sys.exit(app.exec())
+

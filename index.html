@@ -4,75 +4,76 @@
 <meta charset="UTF-8">
 <title>Przyszłość zespołu</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <style>
-    body {
-        font-family: system-ui, sans-serif;
-        background: #0f0f14;
-        color: #eee;
-        padding: 20px;
-        max-width: 900px;
-        margin: auto;
-    }
-    h1 {
-        text-align: center;
-    }
-    .bar-container {
-        margin: 15px 0;
-    }
-    .label {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 4px;
-        font-size: 14px;
-    }
-    .bar-bg {
-        background: #222;
-        height: 26px;
-        border-radius: 6px;
-        overflow: hidden;
-        position: relative;
-    }
-    .bar {
-        height: 100%;
-        background: linear-gradient(90deg, #6b7cff, #9b5cff);
-        width: 0%;
-        transition: width 0.2s;
-    }
-    .controls {
-        margin-top: 6px;
-    }
-    button {
-        background: #333;
-        color: #eee;
-        border: none;
-        padding: 4px 10px;
-        margin-right: 4px;
-        border-radius: 4px;
-        cursor: pointer;
-    }
-    button:hover {
-        background: #444;
-    }
-    .footer {
-        margin-top: 30px;
-        padding-top: 15px;
-        border-top: 1px solid #333;
-    }
-    input {
-        width: 100%;
-        padding: 8px;
-        background: #111;
-        border: 1px solid #333;
-        color: #eee;
-        border-radius: 4px;
-    }
-    .hint {
-        font-size: 12px;
-        color: #aaa;
-        margin-top: 4px;
-    }
+body {
+    font-family: system-ui, sans-serif;
+    background: #0f0f14;
+    color: #eee;
+    padding: 20px;
+    max-width: 900px;
+    margin: auto;
+}
+h1 {
+    text-align: center;
+}
+.bar-container {
+    margin: 16px 0;
+}
+.label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+.bar-bg {
+    background: #222;
+    height: 26px;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #6b7cff, #9b5cff);
+    transition: width 0.2s;
+}
+.controls {
+    margin-top: 6px;
+}
+button {
+    background: #333;
+    color: #eee;
+    border: none;
+    padding: 4px 10px;
+    margin-right: 6px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+button:hover {
+    background: #444;
+}
+.footer {
+    margin-top: 30px;
+    border-top: 1px solid #333;
+    padding-top: 15px;
+}
+input {
+    width: 100%;
+    padding: 8px;
+    background: #111;
+    border: 1px solid #333;
+    color: #eee;
+    border-radius: 4px;
+}
+.small {
+    font-size: 12px;
+    color: #aaa;
+    margin-top: 6px;
+}
 </style>
 </head>
+
 <body>
 
 <h1>Przyszłość zespołu</h1>
@@ -80,11 +81,18 @@
 <div id="bars"></div>
 
 <div class="footer">
-    <strong>Punkty łącznie:</strong> <span id="total">0</span> / 100
+    <strong>Punkty łącznie:</strong>
+    <span id="total">0</span> / 100
     <br><br>
+
+    <button onclick="forceGenerate()">Wygeneruj kod</button>
+    <br><br>
+
     <strong>Kod rozkładu:</strong>
-    <input id="code" placeholder="Pojawi się po rozdaniu 100 pkt">
-    <div class="hint">Wklej kod tutaj, żeby odtworzyć rozkład.</div>
+    <input id="code" placeholder="Kod pojawi się po rozdaniu 100 pkt">
+    <div class="small">
+        Wklej kod tutaj, żeby odtworzyć rozkład punktów.
+    </div>
 </div>
 
 <script>
@@ -113,19 +121,25 @@ function highestOther(except) {
         .sort((a,b)=>b[1]-a[1])[0];
 }
 
+function generateCode() {
+    const json = JSON.stringify(points);
+    const encoded = btoa(encodeURIComponent(json));
+    codeInput.value = encoded;
+}
+
 function update() {
-    barsDiv.querySelectorAll(".bar").forEach(bar => {
+    document.querySelectorAll(".bar").forEach(bar => {
         const name = bar.dataset.name;
         bar.style.width = points[name] + "%";
-        bar.parentElement.previousElementSibling.querySelector(".value").textContent = points[name];
+        bar.parentElement.previousElementSibling
+            .querySelector(".value").textContent = points[name];
     });
 
     const total = totalPoints();
     totalSpan.textContent = total;
 
     if (total === 100) {
-        const encoded = btoa(JSON.stringify(points));
-        codeInput.value = encoded;
+        generateCode();
     }
 }
 
@@ -149,6 +163,10 @@ function removePoint(name) {
     }
 }
 
+function forceGenerate() {
+    generateCode();
+}
+
 categories.forEach(name => {
     const c = document.createElement("div");
     c.className = "bar-container";
@@ -170,7 +188,9 @@ categories.forEach(name => {
 
 codeInput.addEventListener("input", () => {
     try {
-        const decoded = JSON.parse(atob(codeInput.value.trim()));
+        const decoded = JSON.parse(
+            decodeURIComponent(atob(codeInput.value.trim()))
+        );
         categories.forEach(c => {
             points[c] = decoded[c] ?? 0;
         });
